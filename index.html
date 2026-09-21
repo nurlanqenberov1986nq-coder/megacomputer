@@ -1581,7 +1581,7 @@
     }
     // type: 'INCOME' | 'EXPENSE' | 'ADJUSTMENT' | 'TRANSFER'
     // amount: HƏMİŞƏ müsbət ədəd veriləcək; işarəni funksiya özü təyin edir (ADJUSTMENT istisnadır, signedAmount qəbul edir)
-    async function recordTxn({ source, type, amount, note, refType = null, refId = null, dateISO = null, signedAmount = null }) {
+    async function recordTxn({ source, type, amount, note, refType = null, refId = null, dateISO = null, signedAmount = null, extra = null }) {
       let delta;
       if (signedAmount !== null) delta = num(signedAmount);
       else delta = type === 'EXPENSE' ? -Math.abs(num(amount)) : Math.abs(num(amount));
@@ -1591,7 +1591,8 @@
         note: note || '',
         refType, refId,
         isReversal: false,
-        by: currentUser ? currentUser.email : 'system'
+        by: currentUser ? currentUser.email : 'system',
+        ...(extra || {})
       };
       const ref = await db.collection('transactions').add(txn);
       return ref.id;
@@ -1712,6 +1713,24 @@
         if (!t.refType) {
           // referenssiz (əl ilə yazılan) əməliyyat - birbaşa əks-əməliyyat yaz
           await recordTxn({ source: t.source, type: 'REVERSAL', amount: 0, signedAmount: -t.delta, note: `Ləğv: "${t.note}" — Səbəb: ${reason}`, refType: '__manual__', refId: id });
+        }
+        // Optovoyə edilmiş ödəniş ləğv edilirsə, pul kassaya qayıtmaqla yanaşı,
+        // optovoyun borcu və əlaqəli qaimə(lər)in ödənilmə statusu da geri
+        // qaytarılmalıdır — əks halda borc "ödənilmiş" görünməyə davam edərdi.
+        if (t.refType === 'supplierPayment' && t.supplierId) {
+          const supplier = state.suppliers.find(s => s.id === t.supplierId);
+          const amt = num(t.supplierPaymentAmount) || Math.abs(num(t.delta));
+          if (supplier) {
+            await db.collection('suppliers').doc(t.supplierId).update({ debt: num(supplier.debt) + amt });
+          }
+          const dist = Array.isArray(t.distributedInvoices) && t.distributedInvoices.length ? t.distributedInvoices : (t.invoiceId ? [{ invoiceId: t.invoiceId, amount: amt }] : []);
+          for (const d of dist) {
+            const inv = state.invoices.find(i => i.id === d.invoiceId);
+            if (inv) {
+              const newPaid = Math.max(0, num(inv.paidAmount) - num(d.amount));
+              await db.collection('invoices').doc(d.invoiceId).update({ paidAmount: newPaid, status: newPaid <= 0 ? 'UNPAID' : (newPaid >= num(inv.totalAmount) ? 'PAID' : 'PARTIAL') });
+            }
+          }
         }
         await logDeletedRecord({ type: 'Maliyyə Əməliyyatı', originalId: id, summary: t.note, amount: Math.abs(t.delta), reason });
       },
@@ -2847,15 +2866,37 @@
       const s = state.suppliers.find(x => x.id === supId); if (!s) return;
       await db.collection('suppliers').doc(supId).update({ debt: Math.max(0, num(s.debt) - amount) });
       let invoiceDetailStr = 'Ümumi borc ödənişi';
+      const distributedInvoices = [];
       if (invId) {
         const inv = state.invoices.find(i => i.id === invId);
         if (inv) {
           const paid = num(inv.paidAmount) + amount;
           await db.collection('invoices').doc(invId).update({ paidAmount: paid, status: paid >= inv.totalAmount ? 'PAID' : 'PARTIAL' });
           invoiceDetailStr = `Qaimə №: ${inv.invoiceNo}`;
+          distributedInvoices.push({ invoiceId: invId, amount });
         }
+      } else {
+        // Konkret qaimə seçilməyibsə (Ümumi Borcdan Sil), ödənişi ən köhnə açıq
+        // qaimələrdən başlayaraq növbə ilə bağlayırıq ki, "Qaimələr" bölməsində
+        // status düzgün əks olunsun.
+        let remaining = amount;
+        const openInvoices = state.invoices.filter(i => i.supplierId === supId && i.status !== 'PAID').sort((a,b) => new Date(a.date||0) - new Date(b.date||0));
+        const batch = db.batch();
+        for (const inv of openInvoices) {
+          if (remaining <= 0) break;
+          const outstanding = Math.max(0, num(inv.totalAmount) - num(inv.paidAmount));
+          if (outstanding <= 0) continue;
+          const applied = Math.min(outstanding, remaining);
+          const newPaid = num(inv.paidAmount) + applied;
+          batch.update(db.collection('invoices').doc(inv.id), { paidAmount: newPaid, status: newPaid >= inv.totalAmount ? 'PAID' : 'PARTIAL' });
+          distributedInvoices.push({ invoiceId: inv.id, amount: applied });
+          remaining -= applied;
+        }
+        if (distributedInvoices.length) await batch.commit();
+        if (distributedInvoices.length === 1) invoiceDetailStr = `Qaimə №: ${(state.invoices.find(i => i.id === distributedInvoices[0].invoiceId) || {}).invoiceNo || ''}`;
+        else if (distributedInvoices.length > 1) invoiceDetailStr = `${distributedInvoices.length} qaiməyə bölüşdürüldü`;
       }
-      await recordTxn({ source, type: 'EXPENSE', amount, note: `Optovoy Ödəniş (${s.name} | ${invoiceDetailStr}): ${note}`, refType: 'supplierPayment', refId: uid('SP'), dateISO: finalDate });
+      await recordTxn({ source, type: 'EXPENSE', amount, note: `Optovoy Ödəniş (${s.name} | ${invoiceDetailStr}): ${note}`, refType: 'supplierPayment', refId: uid('SP'), dateISO: finalDate, extra: { supplierId: supId, invoiceId: invId || null, supplierPaymentAmount: amount, distributedInvoices } });
       closeModal('pay-supplier-modal');
       alert('Ödəniş icra olundu.');
     }
