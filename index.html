@@ -110,6 +110,9 @@
         <button onclick="switchTab('suppliers')" id="nav-suppliers" class="nav-btn admin-only w-full flex items-center space-x-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-slate-200">
           <i class="fa-solid fa-truck-field w-4 text-center"></i><span>Optovoy Firmalar</span>
         </button>
+        <button onclick="switchTab('invoices')" id="nav-invoices" class="nav-btn admin-only w-full flex items-center space-x-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-slate-200">
+          <i class="fa-solid fa-file-invoice w-4 text-center"></i><span>Qaimələr</span>
+        </button>
         <button onclick="switchTab('credits')" id="nav-credits" class="nav-btn admin-only w-full flex items-center space-x-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors text-slate-400 hover:bg-slate-800 hover:text-slate-200">
           <i class="fa-solid fa-file-invoice-dollar w-4 text-center"></i><span>Kreditlərim</span>
         </button>
@@ -142,6 +145,7 @@
      </div>
     <div class="p-2.5 border-t border-slate-800 space-y-1.5">
       <button onclick="exportToExcelCSV()" class="w-full flex items-center justify-center space-x-1.5 px-2 py-1.5 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg"><i class="fa-solid fa-file-excel"></i><span>Excel-ə Yüklə (CSV)</span></button>
+      <button onclick="exportFullBackup()" class="admin-only w-full flex items-center justify-center space-x-1.5 px-2 py-1.5 text-[11px] font-medium text-teal-400 hover:text-teal-300 bg-teal-500/10 hover:bg-teal-500/20 rounded-lg" title="Bütün bazanın tam surətini (JSON) kompüterinizə endirir"><i class="fa-solid fa-cloud-arrow-down"></i><span>Tam Ehtiyat Nüsxə Al</span></button>
       <label class="admin-only w-full flex items-center justify-center space-x-1.5 px-2 py-1.5 text-[11px] font-medium text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-lg cursor-pointer"><i class="fa-solid fa-file-import"></i><span>Köhnə Backup-u İdxal Et</span><input type="file" id="legacyImportFile" onchange="handleLegacyImport(event)" class="hidden" accept=".json"></label>
       <button onclick="openSmsSettingsModal()" class="admin-only w-full flex items-center justify-center space-x-1.5 px-2 py-1.5 text-[11px] font-medium text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 rounded-lg"><i class="fa-solid fa-comment-sms"></i><span>SMS Ayarları</span></button>
       <button onclick="openDatabaseResetModal()" class="admin-only w-full flex items-center justify-center space-x-1.5 px-2 py-1.5 text-[11px] font-medium text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 rounded-lg"><i class="fa-solid fa-database"></i><span>Bazanı Sıfırla (Panel)</span></button>
@@ -484,6 +488,25 @@
           <button onclick="openSupplierModal()" class="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-xl text-sm font-medium"><i class="fa-solid fa-plus mr-2"></i>Yeni Optovoy</button>
         </div>
         <div id="suppliers-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+      </section>
+
+      <!-- INVOICES (BÜTÜN QAİMƏ TARİXÇƏSİ) -->
+      <section id="tab-invoices" class="tab-content hidden space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-4 bg-slate-900 p-4 rounded-2xl border border-slate-800">
+          <div>
+            <h3 class="text-base font-semibold text-white">Qaimələr (Bütün Alış Tarixçəsi)</h3>
+            <p class="text-xs text-slate-400">Nə vaxt, kimdən, nə alındığını və ödəniş vəziyyətini burada görə bilərsiniz. Sətirə klikləyib tam detallara baxın.</p>
+          </div>
+          <input type="text" id="invoices-search" oninput="renderInvoicesTab()" placeholder="Axtar: qaimə №, optovoy, məhsul..." class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white w-full md:w-72">
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-950/50 text-slate-400 text-xs uppercase">
+              <tr><th class="p-4">Tarix</th><th class="p-4">Qaimə №</th><th class="p-4">Optovoy Firma</th><th class="p-4">Nə Alınıb</th><th class="p-4">Cəmi</th><th class="p-4">Ödənilib</th><th class="p-4">Qalıq</th><th class="p-4">Status</th></tr>
+            </thead>
+            <tbody id="invoices-tbody" class="divide-y divide-slate-800"></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- CREDITS (BANK VƏ MAĞAZA KREDİTLƏRİM) -->
@@ -1178,6 +1201,28 @@
     </div>
   </div>
 
+  <!-- RESET USER PASSWORD MODAL (ADMIN ONLY) -->
+  <div id="reset-password-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-amber-500/40 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
+      <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-amber-950/20"><h3 class="text-lg font-bold text-white flex items-center"><i class="fa-solid fa-key text-amber-400 mr-2"></i>Şifrəni Sıfırla</h3><button onclick="closeModal('reset-password-modal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button></div>
+      <form onsubmit="submitResetPassword(event)" class="p-5 space-y-4">
+        <input type="hidden" id="reset-pass-uid">
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><span class="text-xs text-slate-400 block">İstifadəçi:</span><span id="reset-pass-userlabel" class="font-semibold text-white">-</span></div>
+        <div><label class="block text-xs text-slate-400 mb-1">Yeni Şifrə * <span class="text-slate-600">(ən azı 6 simvol)</span></label><input type="text" id="reset-pass-new" required minlength="6" class="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-3 py-2 text-sm text-white"></div>
+        <p class="text-[10.5px] text-slate-500">İstifadəçi adı eyni qalır, yalnız giriş şifrəsi yenilənir. Əməliyyatdan sonra göstərilən şifrəni işçiyə şifahi bildirin.</p>
+        <div id="reset-pass-error" class="hidden text-xs text-rose-400"></div>
+        <div class="pt-2 flex justify-end"><button type="submit" id="reset-pass-submit-btn" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-sm font-semibold">Şifrəni Sıfırla</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- INVOICE DETAIL MODAL -->
+  <div id="invoice-detail-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
+      <div class="p-4 border-b border-slate-800 flex justify-between items-center"><h3 class="text-lg font-bold text-white flex items-center"><i class="fa-solid fa-file-invoice text-cyan-400 mr-2"></i>Qaimə Detalları</h3><button onclick="closeModal('invoice-detail-modal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button></div>
+      <div id="invoice-detail-body" class="p-5 space-y-2.5 text-sm"></div>
+    </div>
+  </div>
 
   <div id="qs-edit-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
@@ -1643,6 +1688,20 @@
       product: async (id, reason) => {
         const p = state.inventory.find(x => x.id === id); if (!p) return;
         await reverseForRef('inventory', id, reason);
+        // Bu məhsul optovoydan NİSYƏ (borc) alınıbsa, məhsulu silərkən əlaqəli
+        // qaiməni də silib, optovoyun borcunu ödənilməmiş hissə qədər geri
+        // azaldırıq — əks halda məhsul silinsə də borc sistemdə "asılı" qalırdı.
+        const relatedInvoices = state.invoices.filter(i => i.productId === id);
+        for (const inv of relatedInvoices) {
+          const outstanding = Math.max(0, num(inv.totalAmount) - num(inv.paidAmount));
+          if (outstanding > 0 && inv.supplierId) {
+            const supplier = state.suppliers.find(s => s.id === inv.supplierId);
+            if (supplier) {
+              await db.collection('suppliers').doc(inv.supplierId).update({ debt: Math.max(0, num(supplier.debt) - outstanding) });
+            }
+          }
+          await db.collection('invoices').doc(inv.id).delete();
+        }
         await logDeletedRecord({ type: 'Anbar Məhsulu', originalId: id, summary: `${p.name} (${p.stock} ədəd)`, amount: num(p.buyPrice)*num(p.stock), reason });
         await db.collection('inventory').doc(id).delete();
       },
@@ -1701,7 +1760,7 @@
       document.querySelectorAll('.nav-btn').forEach(el => el.className = el.className.replace('bg-cyan-600/20 text-cyan-400', 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'));
       const navBtn = document.getElementById('nav-' + tabId);
       if (navBtn) navBtn.className = navBtn.className.replace('text-slate-400 hover:bg-slate-800 hover:text-slate-200', 'bg-cyan-600/20 text-cyan-400');
-      const titles = { dashboard:'İdarə Paneli', reception:'Qəbul / Resepşn', customers:'Müştərilər (CRM)', repairs:'Usta / Təmir Paneli', archive:'Təhvil & Zəmanət Arxivi', inventory:'Məhsullar (Anbar)', 'quick-sale':'Cəld Satış (POS)', sales:'PC / Kompüter Satışı', suppliers:'Optovoy Firmalar', credits:'Kreditlərim', finance:'Maliyyə (Kasa/Kart)', 'deleted-records':'Silinənlər (İzahatlar)', 'users':'İstifadəçilər' };
+      const titles = { dashboard:'İdarə Paneli', reception:'Qəbul / Resepşn', customers:'Müştərilər (CRM)', repairs:'Usta / Təmir Paneli', archive:'Təhvil & Zəmanət Arxivi', inventory:'Məhsullar (Anbar)', 'quick-sale':'Cəld Satış (POS)', sales:'PC / Kompüter Satışı', suppliers:'Optovoy Firmalar', invoices:'Qaimələr', credits:'Kreditlərim', finance:'Maliyyə (Kasa/Kart)', 'deleted-records':'Silinənlər (İzahatlar)', 'users':'İstifadəçilər' };
       document.getElementById('page-title').textContent = titles[tabId] || '';
       renderAll();
     }
@@ -1718,6 +1777,7 @@
       renderQuickSaleHistory();
       renderPCSalesTable();
       renderSuppliers();
+      renderInvoicesTab();
       renderCreditsSection();
       renderFinance();
       renderDeletedRecords();
@@ -2726,7 +2786,7 @@
         let invoicesHtml = '';
         if (supInvoices.length) {
           invoicesHtml = `<div class="mt-3 border-t border-slate-800 pt-2"><div class="text-[11px] font-semibold text-cyan-400 mb-1">Açıq Qaimələr:</div><div class="space-y-1 max-h-24 overflow-y-auto">` +
-            supInvoices.map(inv => `<div class="text-[10px] bg-slate-950 p-1.5 rounded flex justify-between items-center"><span class="font-mono text-slate-300">${esc(inv.invoiceNo)}</span><span class="text-amber-400 font-bold">${money(inv.totalAmount - num(inv.paidAmount))}</span></div>`).join('') + `</div></div>`;
+            supInvoices.map(inv => `<div onclick="event.stopPropagation();openInvoiceDetail('${inv.id}')" class="text-[10px] bg-slate-950 hover:bg-slate-800 cursor-pointer p-1.5 rounded flex justify-between items-center" title="Detallara bax"><span class="font-mono text-slate-300">${esc(inv.invoiceNo)}</span><span class="flex items-center space-x-1.5"><span class="text-amber-400 font-bold">${money(inv.totalAmount - num(inv.paidAmount))}</span><button onclick="event.stopPropagation();cancelSupplierInvoice('${inv.id}')" class="text-slate-600 hover:text-rose-400" title="Qaiməni ləğv et (məs: səhvən/test üçün yazılıb)"><i class="fa-solid fa-xmark"></i></button></span></div>`).join('') + `</div></div>`;
         }
         return `<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between shadow-lg dblclick-row" ${getDblClickStr('supplier', s.id)}>
           <div><h4 class="font-bold text-white text-base">${esc(s.name)}</h4>
@@ -2798,6 +2858,78 @@
       await recordTxn({ source, type: 'EXPENSE', amount, note: `Optovoy Ödəniş (${s.name} | ${invoiceDetailStr}): ${note}`, refType: 'supplierPayment', refId: uid('SP'), dateISO: finalDate });
       closeModal('pay-supplier-modal');
       alert('Ödəniş icra olundu.');
+    }
+    // Səhvən/test üçün yaradılmış, ya da artıq lazımsız olan bir qaiməni birbaşa
+    // ləğv etmək üçün (nağd/kart əməliyyatı yazmadan) — qalıq məbləğ optovoyun
+    // borcundan çıxılır və qaimə silinir.
+    async function cancelSupplierInvoice(invId) {
+      if (currentUserRole !== 'admin') return alert('Bu əməliyyat yalnız Adminə məxsusdur!');
+      const inv = state.invoices.find(i => i.id === invId); if (!inv) return;
+      const outstanding = Math.max(0, num(inv.totalAmount) - num(inv.paidAmount));
+      if (!confirm(`"${inv.invoiceNo}" qaiməsini ləğv etmək istədiyinizə əminsiniz?\n\nQalıq məbləğ (${money(outstanding)}) optovoyun borcundan siləcək. Bu geri qaytarıla bilməz.`)) return;
+      if (outstanding > 0 && inv.supplierId) {
+        const supplier = state.suppliers.find(s => s.id === inv.supplierId);
+        if (supplier) await db.collection('suppliers').doc(inv.supplierId).update({ debt: Math.max(0, num(supplier.debt) - outstanding) });
+      }
+      await db.collection('invoices').doc(invId).delete();
+    }
+    const INVOICE_STATUS_LABELS = { UNPAID: 'Ödənilməyib', PARTIAL: 'Qismən Ödənilib', PAID: 'Ödənilib' };
+    const INVOICE_STATUS_COLORS = { UNPAID: 'bg-rose-500/15 text-rose-400', PARTIAL: 'bg-amber-500/15 text-amber-400', PAID: 'bg-emerald-500/15 text-emerald-400' };
+    // Bütün qaimələrin tarixçəsi — nə vaxt, kimdən, nə alınıb (Qaimələr bölməsi)
+    function renderInvoicesTab() {
+      const tbody = document.getElementById('invoices-tbody'); if (!tbody) return;
+      const search = (document.getElementById('invoices-search')?.value || '').toLowerCase();
+      const rows = [...state.invoices].sort((a,b) => new Date(b.date||0) - new Date(a.date||0)).filter(inv => {
+        if (!search) return true;
+        const supplier = state.suppliers.find(s => s.id === inv.supplierId);
+        return (inv.invoiceNo||'').toLowerCase().includes(search) || (supplier?.name||'').toLowerCase().includes(search) || (inv.note||'').toLowerCase().includes(search);
+      });
+      tbody.innerHTML = rows.map(inv => {
+        const supplier = state.suppliers.find(s => s.id === inv.supplierId);
+        const remaining = Math.max(0, num(inv.totalAmount) - num(inv.paidAmount));
+        const statusLbl = INVOICE_STATUS_LABELS[inv.status] || inv.status || '-';
+        const statusCls = INVOICE_STATUS_COLORS[inv.status] || 'bg-slate-500/15 text-slate-400';
+        return `<tr onclick="openInvoiceDetail('${inv.id}')" class="hover:bg-slate-800/40 cursor-pointer">
+          <td class="p-4 text-xs text-slate-400">${inv.date ? new Date(inv.date).toLocaleDateString('az-AZ') : '-'}</td>
+          <td class="p-4 font-mono text-slate-200">${esc(inv.invoiceNo||'-')}</td>
+          <td class="p-4 font-medium text-white">${esc(supplier ? supplier.name : (inv.supplierId ? 'Silinmiş optovoy' : '-'))}</td>
+          <td class="p-4 text-xs text-slate-300">${esc(inv.note || '-')}</td>
+          <td class="p-4 font-semibold text-white">${money(inv.totalAmount)}</td>
+          <td class="p-4 text-emerald-400">${money(inv.paidAmount)}</td>
+          <td class="p-4 text-amber-400 font-semibold">${money(remaining)}</td>
+          <td class="p-4"><span class="px-2 py-1 rounded-lg text-[10px] font-semibold ${statusCls}">${statusLbl}</span></td>
+        </tr>`;
+      }).join('') || `<tr><td colspan="8" class="text-center py-6 text-slate-500">Qaimə tapılmadı.</td></tr>`;
+    }
+    // Bir qaiməyə klikləndikdə tam detalları göstərən pəncərə
+    function openInvoiceDetail(invId) {
+      const inv = state.invoices.find(i => i.id === invId); if (!inv) return;
+      const supplier = state.suppliers.find(s => s.id === inv.supplierId);
+      const product = inv.productId ? state.inventory.find(p => p.id === inv.productId) : null;
+      const remaining = Math.max(0, num(inv.totalAmount) - num(inv.paidAmount));
+      const statusLbl = INVOICE_STATUS_LABELS[inv.status] || inv.status || '-';
+      const statusCls = INVOICE_STATUS_COLORS[inv.status] || 'bg-slate-500/15 text-slate-400';
+      let productHtml = '';
+      if (inv.productId) {
+        productHtml = product
+          ? `<div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><span class="text-xs text-slate-400 block mb-1">Anbardakı Məhsul:</span><span class="font-semibold text-cyan-400">${esc(product.name)}</span> <span class="text-slate-400 text-xs">(hazırda stokda: ${num(product.stock)} ədəd)</span></div>`
+          : `<div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><span class="text-xs text-slate-400 block mb-1">Anbardakı Məhsul:</span><span class="text-slate-500 text-xs italic">Bu məhsul artıq silinib</span></div>`;
+      }
+      document.getElementById('invoice-detail-body').innerHTML = `
+        <div class="flex items-center justify-between"><span class="text-xs text-slate-400">Qaimə №</span><span class="font-mono font-bold text-white">${esc(inv.invoiceNo||'-')}</span></div>
+        <div class="flex items-center justify-between"><span class="text-xs text-slate-400">Tarix</span><span class="text-slate-200">${inv.date ? new Date(inv.date).toLocaleString('az-AZ') : '-'}</span></div>
+        <div class="flex items-center justify-between"><span class="text-xs text-slate-400">Optovoy Firma</span><span class="font-semibold text-white">${esc(supplier ? supplier.name : 'Silinmiş optovoy')}</span></div>
+        ${supplier?.phone ? `<div class="flex items-center justify-between"><span class="text-xs text-slate-400">Əlaqə</span><span class="text-slate-200">${esc(supplier.phone)}</span></div>` : ''}
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><span class="text-xs text-slate-400 block mb-1">Nə Alınıb (Açıqlama)</span><span class="text-slate-200">${esc(inv.note||'-')}</span></div>
+        ${productHtml}
+        <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800">
+          <div><span class="text-[10px] text-slate-400 block">Cəmi</span><span class="font-bold text-white">${money(inv.totalAmount)}</span></div>
+          <div><span class="text-[10px] text-slate-400 block">Ödənilib</span><span class="font-bold text-emerald-400">${money(inv.paidAmount)}</span></div>
+          <div><span class="text-[10px] text-slate-400 block">Qalıq</span><span class="font-bold text-amber-400">${money(remaining)}</span></div>
+        </div>
+        <div class="flex items-center justify-between pt-1"><span class="text-xs text-slate-400">Status</span><span class="px-2 py-1 rounded-lg text-[10px] font-semibold ${statusCls}">${statusLbl}</span></div>
+      `;
+      openModal('invoice-detail-modal');
     }
     // ============================================================
     // 18) ŞƏXSİ KREDİTLƏR (BANK / MAĞAZA)
@@ -3089,6 +3221,53 @@
     }
 
     // ============================================================
+    // 22b) TAM EHTİYAT NÜSXƏ (BACKUP) — bütün bazanın (Firestore-dakı bütün
+    // kolleksiyaların) bir JSON faylına endirilməsi. Bu fayl kompüterinizdə,
+    // e-poçtunuzda və ya buludda (Google Drive və s.) saxlanıla bilər — nəyisə
+    // yanlışlıqla silsəniz belə, bu faylı istənilən vaxt açıb məlumatları
+    // görə/yoxlaya bilərsiniz. Bazanın özü isə Google-un serverlərində olduğu
+    // üçün bu, "əlavə təhlükəsizlik qatı"dır, məcburi deyil.
+    // ============================================================
+    function exportFullBackup() {
+      if (currentUserRole !== 'admin') return alert('Bu əməliyyat yalnız Adminə məxsusdur!');
+      try {
+        const backup = {
+          app: 'MeGaComputers',
+          backupVersion: 1,
+          exportedAt: new Date().toISOString(),
+          collections: {
+            jobs: state.jobs,
+            inventory: state.inventory,
+            suppliers: state.suppliers,
+            personalCredits: state.personalCredits,
+            pcSales: state.pcSales,
+            customers: state.customers,
+            quickSales: state.quickSales,
+            transactions: state.transactions,
+            deletedRecords: state.deletedRecords,
+            invoices: state.invoices,
+            categories: state.categories,
+            users: state.users
+          }
+        };
+        const json = JSON.stringify(backup, null, 2);
+        const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const stamp = new Date().toISOString().slice(0,10);
+        const fname = `MeGaComputers_Tam_Ehtiyat_Nusxe_${stamp}.json`;
+        a.href = url; a.download = fname;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        const totalRecords = Object.values(backup.collections).reduce((s, arr) => s + (arr ? arr.length : 0), 0);
+        alert(`Ehtiyat nüsxə uğurla endirildi!\n\nFayl: ${fname}\nÜmumi qeyd sayı: ${totalRecords}\n\nBu faylı təhlükəsiz bir yerdə saxlayın (məsələn öz e-poçtunuza göndərin və ya Google Drive-a yükləyin). Bu, bazanızın həmin andakı tam surətidir.`);
+      } catch (err) {
+        console.error(err);
+        alert('Ehtiyat nüsxə alınarkən xəta baş verdi: ' + err.message);
+      }
+    }
+
+    // ============================================================
     // 23) İSTİFADƏÇİLƏR (ADMİN PANELİNDƏN YENİ İŞÇİ ƏLAVƏ ETMƏ)
     // ============================================================
     const ROLE_LABELS = { admin: 'Admin', reception: 'Resepşn', technician: 'Usta' };
@@ -3107,7 +3286,7 @@
               <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
             </select>
           </td>
-          <td class="p-4 text-right">${isMe ? '' : `<button onclick="promptDelete('user','${u.id}','${esc(u.name)}')" class="text-slate-500 hover:text-rose-400" title="Girişi bağla"><i class="fa-solid fa-user-slash"></i></button>`}</td>
+          <td class="p-4 text-right whitespace-nowrap">${isMe ? '' : `<button onclick="openResetPasswordModal('${u.id}')" class="text-slate-500 hover:text-amber-400 mr-2" title="Şifrəni sıfırla"><i class="fa-solid fa-key"></i></button><button onclick="promptDelete('user','${u.id}','${esc(u.name)}')" class="text-slate-500 hover:text-rose-400" title="Girişi bağla"><i class="fa-solid fa-user-slash"></i></button>`}</td>
         </tr>`;
       }).join('') || `<tr><td colspan="4" class="text-center py-6 text-slate-500">İstifadəçi yoxdur.</td></tr>`;
     }
@@ -3152,6 +3331,52 @@
       } finally {
         await secondaryApp.delete();
         btn.disabled = false; btn.textContent = 'Əlavə Et';
+      }
+    }
+    // ============================================================
+    // İSTİFADƏÇİ ŞİFRƏSİNİ SIFIRLAMA (ADMIN) — Firebase Auth-da başqasının
+    // şifrəsini birbaşa dəyişmək mümkün olmadığından (bu, yalnız Admin SDK/
+    // backend ilə edilir), köhnə hesab "bağlanır" və eyni istifadəçi adı/ad/rol
+    // ilə YENİ giriş hesabı yaradılır — nəticədə işçi üçün sadəcə "şifrə
+    // dəyişdi" effekti alınır, köhnə şifrə artıq işləmir.
+    // ============================================================
+    function openResetPasswordModal(uid) {
+      if (currentUserRole !== 'admin') return alert('Bu əməliyyat yalnız Adminə məxsusdur!');
+      if (uid === (currentUser && currentUser.uid)) return alert('Öz şifrənizi buradan sıfırlaya bilməzsiniz.');
+      const u = state.users.find(x => x.id === uid); if (!u) return;
+      document.getElementById('reset-pass-uid').value = uid;
+      document.getElementById('reset-pass-userlabel').textContent = `${u.name} (${u.username || u.email})`;
+      document.getElementById('reset-pass-new').value = '';
+      document.getElementById('reset-pass-error').classList.add('hidden');
+      openModal('reset-password-modal');
+    }
+    async function submitResetPassword(e) {
+      e.preventDefault();
+      const uid = document.getElementById('reset-pass-uid').value;
+      const newPassword = document.getElementById('reset-pass-new').value;
+      const u = state.users.find(x => x.id === uid); if (!u) return;
+      const errBox = document.getElementById('reset-pass-error');
+      errBox.classList.add('hidden');
+      if (newPassword.length < 6) { errBox.textContent = 'Şifrə ən azı 6 simvol olmalıdır.'; errBox.classList.remove('hidden'); return; }
+      const btn = document.getElementById('reset-pass-submit-btn');
+      btn.disabled = true; btn.textContent = 'Sıfırlanır...';
+      const oldEmail = u.email || '';
+      const newEmail = oldEmail.includes('@') ? oldEmail.replace('@', '+r' + Date.now() + '@') : ('user' + Date.now() + '@mega.local');
+      const secondaryApp = firebase.initializeApp(firebaseConfig, 'secondary-reset-' + Date.now());
+      try {
+        const cred = await secondaryApp.auth().createUserWithEmailAndPassword(newEmail, newPassword);
+        await db.collection('users').doc(cred.user.uid).set({ name: u.name, email: newEmail, username: u.username || null, role: u.role });
+        if (u.username) await db.collection('usernames').doc(u.username).set({ uid: cred.user.uid, email: newEmail });
+        await db.collection('users').doc(uid).delete();
+        await secondaryApp.auth().signOut();
+        closeModal('reset-password-modal');
+        alert(`Şifrə sıfırlandı!\n\nİşçi: ${u.name}\nGiriş adı: ${u.username || newEmail}\nYeni şifrə: ${newPassword}\n\nBunu işçiyə şifahi bildirin.`);
+      } catch (err) {
+        errBox.textContent = 'Xəta: ' + err.message;
+        errBox.classList.remove('hidden');
+      } finally {
+        await secondaryApp.delete();
+        btn.disabled = false; btn.textContent = 'Şifrəni Sıfırla';
       }
     }
 
